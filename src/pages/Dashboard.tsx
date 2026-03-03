@@ -42,13 +42,13 @@ const Dashboard = () => {
 
   // Calculate total invested amount from portfolio
   const totalInvested = portfolio.reduce((sum, item) => {
-    return sum + (item.amount * item.buyPrice);
+    return sum + (item.totalAmount * item.buyPrice);
   }, 0);
 
   const totalValue = portfolio.reduce((sum, item) => {
     const currentPrice = prices[item.coinId]?.usd || 0;
     const { currentValue } = calculateProfit(
-      item.amount,
+      item.totalAmount,
       item.buyPrice,
       currentPrice
     );
@@ -65,11 +65,11 @@ const Dashboard = () => {
     // Calculate total current value and total invested
     const currentTotalValue = portfolio.reduce((sum, item) => {
       const currentPrice = prices[item.coinId]?.usd || 0;
-      return sum + (item.amount * currentPrice);
+      return sum + (item.totalAmount * currentPrice);
     }, 0);
 
     const invested = portfolio.reduce((sum, item) => {
-      return sum + (item.amount * item.buyPrice);
+      return sum + (item.totalAmount * item.buyPrice);
     }, 0);
 
     // Calculate percentage growth based on actual investment
@@ -90,7 +90,7 @@ const Dashboard = () => {
     portfolio.forEach((asset) => {
       const currentPrice = prices[asset.coinId]?.usd || 0;
       const change24h = prices[asset.coinId]?.usd_24h_change || 0;
-      const currentValue = asset.amount * currentPrice;
+      const currentValue = asset.totalAmount * currentPrice;
       
       // Calculate the USD change for this asset
       const assetChange = currentValue * (change24h / 100);
@@ -137,7 +137,7 @@ const Dashboard = () => {
           const currentPrice = prices[asset.coinId]?.usd || 0;
           return {
             date: new Date().toISOString().split('T')[0],
-            value: asset.amount * currentPrice,
+            value: asset.totalAmount * currentPrice,
           };
         });
         
@@ -166,7 +166,7 @@ const Dashboard = () => {
       const merged: Record<string, number> = {};
       histories.forEach(({ asset, history }) => {
         history.forEach(({ date, price }: any) => {
-          merged[date] = (merged[date] || 0) + price * asset.amount;
+          merged[date] = (merged[date] || 0) + price * asset.totalAmount;
         });
       });
 
@@ -458,7 +458,7 @@ const Dashboard = () => {
                     const currentPrice = prices[asset.coinId]?.usd || 0;
                     const { currentValue, profit, profitPercent } =
                       calculateProfit(
-                        asset.amount,
+                        asset.totalAmount,
                         asset.buyPrice,
                         currentPrice
                       );
@@ -474,7 +474,7 @@ const Dashboard = () => {
                           {formatCurrency(currentPrice)}
                         </td>
                         <td className="px-6 py-4 text-right text-sm text-gray-700">
-                          {asset.amount}
+                          {asset.totalAmount} {asset.symbol.toUpperCase()}
                         </td>
                         <td className="px-6 py-4 text-right text-sm font-semibold text-gray-900">
                           {formatCurrency(currentValue)}

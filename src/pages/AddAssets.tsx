@@ -18,7 +18,11 @@ import {
   logTransaction,
   getUserPortfolio,
 } from '@/services/portfolio';
-import { searchCoins, getCoinPrices } from '@/services/coingecko';
+import {
+  searchCoins,
+  getCoinPrices,
+  getCustomDayPrice,
+} from '@/services/coingecko';
 import { getUserProfile, updateUserBalance } from '@/services/user';
 import useAuth from '@/hooks/useAuth';
 
@@ -72,6 +76,13 @@ const popularCoins = [
 const AddAssets = () => {
   const { user } = useAuth();
   const [inputMode, setInputMode] = useState<'amount' | 'usd'>('amount');
+  const [inputSelectDate, setInputSelectDate] = useState<'today' | 'custom'>(
+    'today'
+  );
+
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().split('T')[0]
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<CoinSearchResult[]>([]);
   const [selectedCoin, setSelectedCoin] = useState<CoinSearchResult | null>(
@@ -103,6 +114,7 @@ const AddAssets = () => {
       // Fetch user profile to get balance
       const profile = await getUserProfile(user.uid);
       setUserBalance(profile?.balance ?? 0);
+
     };
     fetchUserDetails();
   }, [user]);
@@ -141,6 +153,7 @@ const AddAssets = () => {
       if (!selectedCoin) return;
       try {
         const priceData = await getCoinPrices([selectedCoin.id]);
+        console.log(selectedCoin.id, priceData);
         const price = priceData[selectedCoin.id]?.usd || 0;
         setCurrentPrice(price);
       } catch (err) {
@@ -150,12 +163,38 @@ const AddAssets = () => {
     fetchPrice();
   }, [selectedCoin]);
 
-  // Update coin amount if USD input changes
+  // Fetch coins price when date changes
   useEffect(() => {
-    if (usdAmount && currentPrice > 0) {
-      setAmount((parseFloat(usdAmount) / currentPrice).toFixed(6));
-    }
-  }, [usdAmount, currentPrice]);
+    const fetchCustomPrice = async () => {
+      if (inputSelectDate === 'today') return;
+
+      try {
+        const priceByDate = await getCustomDayPrice(
+          selectedCoin?.id || '',
+          selectedDate
+        );
+        setCurrentPrice(priceByDate || 0);
+        console.log(
+          'Custom Price for',
+          selectedCoin?.id,
+          'on',
+          selectedDate,
+          ':',
+          priceByDate
+        );
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchCustomPrice();
+  }, [inputSelectDate, selectedDate, selectedCoin]);
+
+  // Update coin amount if USD input changes
+  // useEffect(() => {
+  //   if (usdAmount && currentPrice > 0) {
+  //     setAmount((parseFloat(usdAmount) / currentPrice).toFixed(6));
+  //   }
+  // }, [usdAmount, currentPrice]);
 
   const handleSelectCoin = (coin: CoinSearchResult) => {
     setSelectedCoin(coin);
@@ -202,13 +241,16 @@ const AddAssets = () => {
       }
 
       // Log the transaction
-      await logTransaction({
-        coinId: selectedCoin.id,
-        type: 'buy',
-        amount: coinAmount,
-        price: currentPrice,
-        totalSpent: usdSpent,
-      });
+      await logTransaction(
+        {
+          coinId: selectedCoin.id,
+          type: 'buy',
+          amount: coinAmount,
+          price: currentPrice,
+          totalSpent: usdSpent,
+        },
+        selectedDate
+      );
 
       // Update local portfolio & balance
       setPortfolio((prev) =>
@@ -239,7 +281,7 @@ const AddAssets = () => {
 
       setSuccess(true);
       setTimeout(() => {
-        setSelectedCoin(null);
+        // setSelectedCoin(null);
         setAmount('');
         setUsdAmount('');
         setSuccess(false);
@@ -395,7 +437,15 @@ const AddAssets = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSelectedCoin(null)}
+                    onClick={() => {
+                      setSelectedCoin(null);
+                      setAmount('');
+                      setUsdAmount('');
+                      setError('');
+                      setSuccess(false);
+                      setInputSelectDate('today');
+                      setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }}
                     className="ml-auto text-gray-400 hover:text-gray-600"
                   >
                     <XCircle className="size-5" />
@@ -437,6 +487,57 @@ const AddAssets = () => {
                     </button>
                   </div>
 
+                  <p className="text-sm text-gray-500 mb-2">
+                    <span className="font-medium">Select Date</span>
+                  </p>
+                  {/* Toggle for date */}
+                  <div className="flex border border-gray-200 rounded-lg overflow-hidden mb-4">
+                    <button
+                      type="button"
+                      className={`flex-1 py-2 text-sm font-medium ${
+                        inputSelectDate === 'today'
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
+                      onClick={() => {
+                        setInputSelectDate('today');
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                        setAmount('');
+                        setUsdAmount('');
+                      }}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 py-2 text-sm font-medium ${
+                        inputSelectDate === 'custom'
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
+                      onClick={() => {
+                        setInputSelectDate('custom');
+                        setAmount('');
+                        setUsdAmount('');
+                      }}
+                    >
+                      Custom Day
+                    </button>
+                  </div>
+
+                  {inputSelectDate === 'custom' && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Select Date
+                      </label>
+                      <Input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                      />
+                    </div>
+                  )}
+
                   {/* Input fields */}
                   {inputMode === 'amount' ? (
                     <div>
@@ -452,7 +553,6 @@ const AddAssets = () => {
                         onChange={(e) => {
                           const val = e.target.value;
                           setAmount(val);
-                          // Update USD automatically
                           setUsdAmount(
                             currentPrice
                               ? (parseFloat(val) * currentPrice).toFixed(2)

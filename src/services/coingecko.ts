@@ -1,11 +1,6 @@
-// src/services/coingecko.ts
 
-// 🔹 Base URL for CoinGecko API
 const BASE_URL = 'https://api.coingecko.com/api/v3';
 
-/**
- * Fetch simple prices for multiple coins (with 24h change).
- */
 export const getCoinPrices = async (coinIds: string[]) => {
   if (!coinIds.length) return {};
   try {
@@ -24,9 +19,6 @@ export const getCoinPrices = async (coinIds: string[]) => {
   }
 };
 
-/**
- * Fetch detailed market data for a single coin.
- */
 export const getCoinDetails = async (coinId: string) => {
   if (!coinId) return null;
   try {
@@ -54,9 +46,21 @@ export const getCoinDetails = async (coinId: string) => {
   }
 };
 
-/**
- * Search for coins by name or symbol.
- */
+export const getCustomDayPrice = async (coinId: string, customDate: any) => {
+  if (!coinId) return null;
+  try {
+    const response = await fetch(
+      `${BASE_URL}/coins/${coinId}/history?date=${customDate}&localization=false`
+    );
+    if (!response.ok) throw new Error('Failed to fetch previous day price');
+    const data = await response.json();
+    return data.market_data?.current_price?.usd || null;
+  } catch (error) {
+    console.error('Error fetching previous day price:', error);
+    return null;
+  };
+}
+
 export const searchCoins = async (query: string) => {
   if (!query) return [];
   try {
@@ -77,9 +81,7 @@ export const searchCoins = async (query: string) => {
   }
 };
 
-/**
- * Get global crypto market overview.
- */
+
 export const getGlobalMarketData = async () => {
   try {
     const response = await fetch(`${BASE_URL}/global`);
@@ -98,12 +100,6 @@ export const getGlobalMarketData = async () => {
   }
 };
 
-/**
- * 🔹 Fetch price history for a coin.
- * @param coinId - CoinGecko coin ID (e.g., 'bitcoin')
- * @param days - Number of days (1, 7, 30, 90, 180, 365, 'max')
- * @returns Array of [timestamp, price]
- */
 export const getCoinMarketChart = async (
   coinId: string,
   days: number | string = 7
@@ -118,7 +114,6 @@ export const getCoinMarketChart = async (
       throw new Error(`Failed to fetch market chart for ${coinId}`);
 
     const data = await response.json();
-    // Returns { prices: [[timestamp, price], ...], market_caps: [], total_volumes: [] }
     return data.prices.map(([timestamp, price]: [number, number]) => ({
       date: new Date(timestamp).toISOString().split('T')[0],
       price,
@@ -129,11 +124,6 @@ export const getCoinMarketChart = async (
   }
 };
 
-/**
- * 🔹 Get historical price of a coin for a specific date (e.g., '30-12-2025').
- * @param coinId - CoinGecko coin ID
- * @param date - Date in DD-MM-YYYY format
- */
 export const getCoinHistoricalPrice = async (coinId: string, date: string) => {
   if (!coinId || !date) return null;
   try {

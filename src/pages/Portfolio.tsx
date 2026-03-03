@@ -7,6 +7,8 @@ import {
   deleteFromPortfolio,
   getUserPortfolio,
   logTransaction,
+  savePortfolioSnapshot,
+  getPortfolioHistory,
 } from '@/services/portfolio';
 import { getCoinPrices } from '@/services/coingecko';
 import { calculateProfit } from '@/utils/calculateProfits';
@@ -21,8 +23,18 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+interface PortfolioAsset {
+  id: string;
+  coinId: string;
+  name: string;
+  symbol?: string;
+  amount: number;
+  totalAmount?: number;
+  buyPrice: number;
+}
+
 const Portfolio = () => {
-  const [portfolio, setPortfolio] = useState<any[]>([]);
+  const [portfolio, setPortfolio] = useState<PortfolioAsset[]>([]);
   const [prices, setPrices] = useState<any>({});
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -33,12 +45,11 @@ const Portfolio = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
-
-  // 🔹 Fetch portfolio and prices
+  // Fetch portfolio and prices
   const fetchPortfolio = async () => {
     setIsLoading(true);
     try {
-      const userPortfolio = await getUserPortfolio();
+      const userPortfolio = (await getUserPortfolio()) as PortfolioAsset[];
       setPortfolio(userPortfolio);
       console.log('User Portfolio:', userPortfolio);
 
@@ -47,9 +58,28 @@ const Portfolio = () => {
       if (coinIds.length > 0) {
         const priceData = await getCoinPrices(coinIds);
         setPrices(priceData);
+
+        // Save portfolio snapshot to Firebase for historical data
+        await savePortfolioSnapshot(userPortfolio, priceData);
       }
 
-      buildChart(userPortfolio);
+      // Fetch historical data from Firebase for the chart
+      let historyData = await getPortfolioHistory(7);
+
+      // If no historical data exists (new user), create initial data point with today's value
+      if (historyData.every((d) => d.value === 0)) {
+
+        console.log('userportfolio for initial chart data:', userPortfolio);
+        const todayValue = userPortfolio.reduce((sum, asset) => {
+          const price = prices[asset.coinId]?.usd || asset.buyPrice || 0;
+          return sum + price * (asset.totalAmount || 0);
+        }, 0);
+
+        const today = new Date().toISOString().split('T')[0];
+        historyData = [{ date: today, value: todayValue }];
+      }
+
+      setChartData(historyData);
     } catch (err) {
       console.error(err);
       setError('Failed to load portfolio.');
@@ -59,35 +89,20 @@ const Portfolio = () => {
     }
   };
 
-  // 🔹 Build chart data
-  const buildChart = (userPortfolio: any[]) => {
-    const merged: Record<string, number> = {};
-
-    // Create mock chart data for demo (daily values over 7 days)
-    const today = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(today.getDate() - i);
-      const formattedDate = date.toISOString().split('T')[0];
-
-      merged[formattedDate] = userPortfolio.reduce((sum, asset) => {
-        const price = prices[asset.coinId]?.usd || asset.buyPrice;
-        return sum + price * asset.amount;
-      }, 0);
-    }
-
-    const data = Object.entries(merged)
-      .map(([date, value]) => ({ date, value }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    setChartData(data);
-  };
+  // Build chart data (now using real Firebase data)
+  // This function is kept for backwards compatibility but chart data
+  // is now fetched directly from Firebase in fetchPortfolio
+  // const buildChart = (userPortfolio: any[]) => {
+  // Chart data is now fetched from Firebase in fetchPortfolio
+  // This function is kept for potential future use with live calculations
+  //   console.log('Portfolio data for calculations:', userPortfolio);
+  // };
 
   useEffect(() => {
     fetchPortfolio();
   }, []);
 
-  // 🔹 Remove asset
+  // Remove asset
   const handleSell = async (
     id: string,
     currentValue: number,
@@ -99,14 +114,16 @@ const Portfolio = () => {
       await deleteFromPortfolio(id, currentValue);
 
       // Log the transaction
-      await logTransaction({
-        coinId: coinId,
-        type: 'sell',
-        amount: amount,
-        price: currentPrice,
-        totalSpent: currentValue,
-      });
-
+      await logTransaction(
+        {
+          coinId: coinId,
+          type: 'sell',
+          amount: amount,
+          price: currentPrice,
+          totalSpent: currentValue,
+        },
+        lastUpdated.toISOString().split('T')[0]
+      );
 
       setSuccess(true);
       fetchPortfolio();
@@ -117,9 +134,13 @@ const Portfolio = () => {
     }
   };
 
-  // 🔹 Filtered portfolio
+  // Filtered portfolio
   const filteredPortfolio = portfolio.filter((asset) => {
-    const matchesSearch = asset;
+    // only keep assets whose name or symbol match the search term
+    const term = search.toLowerCase();
+    const matchesSearch =
+      asset.name.toLowerCase().includes(term) ||
+      asset.symbol?.toLowerCase().includes(term);
     console.log('Filtering asset:', asset, 'matches search:', matchesSearch);
     return matchesSearch;
   });
@@ -279,11 +300,11 @@ const Portfolio = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredPortfolio.map((asset) => {
+                  filteredPortfolio.map((asset: PortfolioAsset) => {
                     const currentPrice = prices[asset.coinId]?.usd || 0;
                     const { currentValue, profit, profitPercent } =
                       calculateProfit(
-                        asset.amount,
+                        asset.totalAmount || asset.amount,
                         asset.buyPrice,
                         currentPrice
                       );
@@ -300,7 +321,8 @@ const Portfolio = () => {
                           {formatCurrency(currentPrice)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-700">
-                          {asset.amount}
+                          {asset.totalAmount || asset.amount}{' '}
+                          {asset.symbol?.toUpperCase()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
                           {formatCurrency(currentValue)}
