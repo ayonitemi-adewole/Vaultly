@@ -4,14 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, RefreshCw, Search, XCircle, CheckCircle2 } from 'lucide-react';
 import {
-  deleteFromPortfolio,
   getUserPortfolio,
-  logTransaction,
   savePortfolioSnapshot,
   getPortfolioHistory,
+  sellAsset,
 } from '@/services/portfolio';
 import { getCoinPrices } from '@/services/coingecko';
-import { calculateProfit } from '@/utils/calculateProfits';
+import { calculateProfitForHolding } from '@/utils/calculateProfits';
 import { Link } from 'react-router-dom';
 import {
   AreaChart,
@@ -31,6 +30,7 @@ interface PortfolioAsset {
   amount: number;
   totalAmount?: number;
   buyPrice: number;
+  averageBuyPrice?: number;
 }
 
 const Portfolio = () => {
@@ -67,7 +67,7 @@ const Portfolio = () => {
       let historyData = await getPortfolioHistory(7);
 
       // If no historical data exists (new user), create initial data point with today's value
-      if (historyData.every((d) => d.value === 0)) {
+      if (historyData.every((d: any) => d.value === 0)) {
 
         console.log('userportfolio for initial chart data:', userPortfolio);
         const todayValue = userPortfolio.reduce((sum, asset) => {
@@ -104,33 +104,20 @@ const Portfolio = () => {
 
   // Remove asset
   const handleSell = async (
-    id: string,
-    currentValue: number,
-    currentPrice: number,
     coinId: string,
-    amount: number
+    sellAmount: number,
+    sellPrice: number,
+    totalReceived: number
   ) => {
     try {
-      await deleteFromPortfolio(id, currentValue);
-
-      // Log the transaction
-      await logTransaction(
-        {
-          coinId: coinId,
-          type: 'sell',
-          amount: amount,
-          price: currentPrice,
-          totalSpent: currentValue,
-        },
-        lastUpdated.toISOString().split('T')[0]
-      );
+      await sellAsset(coinId, sellAmount, sellPrice, totalReceived, lastUpdated.toISOString().split('T')[0]);
 
       setSuccess(true);
       fetchPortfolio();
       setTimeout(() => setSuccess(false), 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Failed to remove asset.');
+      setError(err.message || 'Failed to sell asset.');
     }
   };
 
@@ -152,15 +139,15 @@ const Portfolio = () => {
     }).format(value);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background transition-colors duration-300 dark:bg-slate-950">
       <AppSidebar />
       <main className="ml-64 p-8">
         {/* Header */}
         <header className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Portfolio</h1>
+          <h1 className="text-2xl font-bold text-foreground dark:text-slate-100">Portfolio</h1>
           <div className="flex gap-2">
-            <Link to="/add-assets">
-              <Button className="bg-gray-900 hover:bg-gray-800 gap-2">
+            <Link to="../add-asset">
+              <Button className="bg-primary hover:bg-primary/90 gap-2 text-primary-foreground">
                 <Plus className="size-4" />
                 Add Asset
               </Button>
@@ -176,39 +163,39 @@ const Portfolio = () => {
 
         {/* Success/Error Messages */}
         {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
-            <CheckCircle2 className="size-5 text-green-600" />
-            <span className="text-green-700 font-medium">
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 dark:bg-green-950/50 dark:border-green-800">
+            <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />
+            <span className="text-green-700 font-medium dark:text-green-400">
               Asset removed successfully!
             </span>
           </div>
         )}
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-            <XCircle className="size-5 text-red-600" />
-            <span className="text-red-700">{error}</span>
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 dark:bg-red-950/50 dark:border-red-800">
+            <XCircle className="size-5 text-red-600 dark:text-red-400" />
+            <span className="text-red-700 dark:text-red-400">{error}</span>
           </div>
         )}
 
         {/* Search */}
         <div className="mb-6 relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search assets..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 border-border focus:border-primary"
           />
         </div>
 
         {/* Portfolio Chart */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
+        <div className="bg-card rounded-xl shadow-sm border border-border p-6 mb-8 dark:bg-slate-900 dark:shadow-slate-900/20">
+          <h2 className="text-lg font-semibold text-foreground dark:text-slate-100 mb-2">
             Portfolio Value (7d)
           </h2>
           {chartData.length === 0 ? (
-            <p className="text-gray-400 text-sm">No data available</p>
+            <p className="text-muted-foreground text-sm">No data available</p>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={chartData}>
@@ -224,14 +211,16 @@ const Portfolio = () => {
                     <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-slate-700" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 12, fill: '#6b7280' }}
+                  className="dark:fill-slate-400"
                 />
                 <YAxis
                   tickFormatter={(v) => `$${v.toLocaleString()}`}
                   tick={{ fontSize: 12, fill: '#6b7280' }}
+                  className="dark:fill-slate-400"
                 />
                 <Tooltip
                   formatter={(v?: number) => [
@@ -252,40 +241,40 @@ const Portfolio = () => {
         </div>
 
         {/* Assets Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Your Assets</h3>
+        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden dark:bg-slate-900 dark:shadow-slate-900/20">
+          <div className="p-6 border-b border-border">
+            <h3 className="text-lg font-semibold text-foreground dark:text-slate-100">Your Assets</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted dark:bg-slate-800">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Asset
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Price
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Amount
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Value
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Profit/Loss
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border dark:divide-slate-700">
                 {isLoading ? (
                   <tr>
                     <td
                       colSpan={6}
-                      className="px-6 py-8 text-center text-gray-500"
+                      className="px-6 py-8 text-center text-muted-foreground"
                     >
                       Loading portfolio...
                     </td>
@@ -294,7 +283,7 @@ const Portfolio = () => {
                   <tr>
                     <td
                       colSpan={6}
-                      className="px-6 py-8 text-center text-gray-500"
+                      className="px-6 py-8 text-center text-muted-foreground"
                     >
                       No assets found.
                     </td>
@@ -303,36 +292,36 @@ const Portfolio = () => {
                   filteredPortfolio.map((asset: PortfolioAsset) => {
                     const currentPrice = prices[asset.coinId]?.usd || 0;
                     const { currentValue, profit, profitPercent } =
-                      calculateProfit(
+                      calculateProfitForHolding(
                         asset.totalAmount || asset.amount,
-                        asset.buyPrice,
+                        asset.averageBuyPrice || asset.buyPrice,
                         currentPrice
                       );
 
                     return (
                       <tr
                         key={asset.coinId}
-                        className="hover:bg-gray-50 transition-colors"
+                        className="hover:bg-muted transition-colors dark:hover:bg-slate-800"
                       >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground dark:text-slate-100">
                           {asset.name}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-muted-foreground">
                           {formatCurrency(currentPrice)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-muted-foreground">
                           {asset.totalAmount || asset.amount}{' '}
                           {asset.symbol?.toUpperCase()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-foreground dark:text-slate-100">
                           {formatCurrency(currentValue)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                           <span
                             className={
                               profit >= 0
-                                ? 'text-green-500 font-medium'
-                                : 'text-red-500 font-medium'
+                                ? 'text-green-500 font-medium dark:text-green-400'
+                                : 'text-red-500 font-medium dark:text-red-400'
                             }
                           >
                             {profit >= 0 ? '+' : ''}
@@ -345,14 +334,13 @@ const Portfolio = () => {
                             size="icon"
                             onClick={() =>
                               handleSell(
-                                asset.id,
-                                currentValue,
-                                currentPrice,
                                 asset.coinId,
-                                asset.amount
+                                asset.totalAmount || asset.amount,
+                                currentPrice,
+                                currentValue
                               )
                             }
-                            className="text-red-500 hover:text-red-700 font-semibold"
+                            className="text-red-500 hover:text-red-700 font-semibold dark:text-red-400 dark:hover:text-red-300"
                           >
                             {/* <XCircle className="size-5" /> */}
                             <p>SELL</p>

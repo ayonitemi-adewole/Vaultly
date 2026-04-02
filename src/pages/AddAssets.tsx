@@ -13,17 +13,14 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
-  addToPortfolio,
-  updatePortfolioAsset,
-  logTransaction,
-  getUserPortfolio,
+  buyAsset,
 } from '@/services/portfolio';
 import {
   searchCoins,
   getCoinPrices,
   getCustomDayPrice,
 } from '@/services/coingecko';
-import { getUserProfile, updateUserBalance } from '@/services/user';
+import { getUserProfile } from '@/services/user';
 import useAuth from '@/hooks/useAuth';
 
 interface CoinSearchResult {
@@ -95,17 +92,7 @@ const AddAssets = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const [portfolio, setPortfolio] = useState<any[]>([]);
   const [userBalance, setUserBalance] = useState<number>(0);
-
-  // Fetch portfolio on mount
-  useEffect(() => {
-    const fetchPortfolio = async () => {
-      const data = await getUserPortfolio();
-      setPortfolio(data);
-    };
-    fetchPortfolio();
-  }, []);
 
   // Fetch user details
   useEffect(() => {
@@ -216,79 +203,31 @@ const AddAssets = () => {
     const coinAmount = parseFloat(amount);
     const usdSpent = parseFloat(usdAmount);
 
-    if (usdSpent > (userBalance ?? 0)) {
-      setError('Insufficient balance');
-      return;
-    }
-
     setIsSubmitting(true);
     setError('');
 
     try {
-      // Check if coin exists in portfolio
-      const existing = portfolio.find((c) => c.coinId === selectedCoin.id);
-      if (existing) {
-        await updatePortfolioAsset(existing.id, coinAmount, usdSpent);
-      } else {
-        await addToPortfolio({
-          coinId: selectedCoin.id,
-          name: selectedCoin.name,
-          symbol: selectedCoin.symbol,
-          amount: coinAmount,
-          buyPrice: currentPrice,
-          image: selectedCoin.image,
-        });
-      }
+      await buyAsset({
+        coinId: selectedCoin.id,
+        name: selectedCoin.name,
+        symbol: selectedCoin.symbol,
+        amount: coinAmount,
+        buyPrice: currentPrice,
+        image: selectedCoin.image,
+      }, usdSpent, selectedDate);
 
-      // Log the transaction
-      await logTransaction(
-        {
-          coinId: selectedCoin.id,
-          type: 'buy',
-          amount: coinAmount,
-          price: currentPrice,
-          totalSpent: usdSpent,
-        },
-        selectedDate
-      );
-
-      // Update local portfolio & balance
-      setPortfolio((prev) =>
-        existing
-          ? prev.map((p) =>
-              p.coinId === selectedCoin.id
-                ? {
-                    ...p,
-                    totalAmount: p.totalAmount + coinAmount,
-                    averageBuyPrice:
-                      (p.averageBuyPrice * p.totalAmount + usdSpent) /
-                      (p.totalAmount + coinAmount),
-                  }
-                : p
-            )
-          : [
-              ...prev,
-              {
-                coinId: selectedCoin.id,
-                totalAmount: coinAmount,
-                averageBuyPrice: currentPrice,
-              },
-            ]
-      );
+      // Update local state
       setUserBalance((prev) => prev - usdSpent);
-      console.log('New Balance:', userBalance - usdSpent);
-      await updateUserBalance(user?.uid || '', userBalance - usdSpent);
 
       setSuccess(true);
       setTimeout(() => {
-        // setSelectedCoin(null);
         setAmount('');
         setUsdAmount('');
         setSuccess(false);
       }, 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Failed to add asset. Try again.');
+      setError(err.message || 'Failed to add asset. Try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -301,57 +240,57 @@ const AddAssets = () => {
     }).format(value);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background transition-colors duration-300 dark:bg-slate-950">
       <AppSidebar />
       <main className="ml-64 p-8">
         <header className="mb-8">
           <Link
             to="/dashboard"
-            className="inline-flex items-center text-gray-500 hover:text-gray-900 mb-4"
+            className="inline-flex items-center text-muted-foreground hover:text-primary mb-4 transition-colors"
           >
             <ArrowLeft className="size-4 mr-1" />
             Back to Dashboard
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900">Add New Asset</h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-foreground dark:text-slate-100">Add New Asset</h1>
+          <p className="text-muted-foreground text-sm mt-1">
             Search and add cryptocurrencies to your portfolio
           </p>
         </header>
 
         {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
-            <CheckCircle2 className="size-5 text-green-600" />
-            <span className="text-green-700 font-medium">
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 dark:bg-green-950/50 dark:border-green-800">
+            <CheckCircle2 className="size-5 text-green-600 dark:text-green-400" />
+            <span className="text-green-700 font-medium dark:text-green-400">
               Asset added successfully!
             </span>
           </div>
         )}
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-            <XCircle className="size-5 text-red-600" />
-            <span className="text-red-700">{error}</span>
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 dark:bg-red-950/50 dark:border-red-800">
+            <XCircle className="size-5 text-red-600 dark:text-red-400" />
+            <span className="text-red-700 dark:text-red-400">{error}</span>
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Search */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="bg-card rounded-xl p-6 shadow-sm border border-border dark:bg-slate-900 dark:shadow-slate-900/20">
+            <h2 className="text-lg font-semibold text-foreground dark:text-slate-100 mb-4">
               Search Cryptocurrency
             </h2>
             <div className="relative mb-4">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
               <Input
                 type="text"
                 placeholder="Search by name or symbol..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-10 border-border focus:border-primary"
                 disabled={!!selectedCoin}
               />
               {isSearching && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-5 text-gray-400 animate-spin" />
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground animate-spin" />
               )}
             </div>
 

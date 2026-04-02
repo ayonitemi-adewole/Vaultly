@@ -53,7 +53,7 @@ const FeatureCard = ({
       initial={{ opacity: 0, y: 30 }}
       animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 30 }}
       transition={{ duration: 0.5, delay: index * 0.1, ease: 'easeOut' }}
-      className="group relative overflow-hidden rounded-2xl bg-white shadow-lg shadow-gray-200/50 transition-all duration-500 hover:shadow-2xl hover:shadow-gray-200/70"
+      className="group relative overflow-hidden rounded-2xl bg-card shadow-lg shadow-black/5 transition-all duration-500 hover:shadow-2xl hover:shadow-black/10 dark:bg-slate-900 dark:shadow-slate-900/20 dark:hover:shadow-slate-900/30"
     >
       {/* Image */}
       <div className="relative h-80 overflow-hidden">
@@ -82,13 +82,13 @@ const FeatureCard = ({
       </div>
 
       {/* Description section */}
-      <div className="bg-white p-6 transition-colors duration-300 group-hover:bg-gray-50">
-        <p className="mb-4 text-sm leading-relaxed text-gray-500">
+      <div className="bg-card p-6 transition-colors duration-300 group-hover:bg-muted dark:bg-slate-900 dark:group-hover:bg-slate-800">
+        <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
           {card.description}
         </p>
         <Link
           to=""
-          className="inline-flex items-center gap-1 text-sm font-medium text-gray-900 transition-colors group-hover:text-gray-600"
+          className="inline-flex items-center gap-1 text-sm font-medium text-foreground transition-colors group-hover:text-primary dark:group-hover:text-slate-200"
         >
           {card.link}
           <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
@@ -103,11 +103,11 @@ const SectionTwo = () => {
   const isInView = useInView(containerRef, { once: true, margin: '-50px' });
 
   return (
-    <div className="relative overflow-hidden bg-white py-20 md:py-28">
+    <div className="relative overflow-hidden bg-background py-20 md:py-28 transition-colors duration-300 dark:bg-slate-950">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -right-32 top-20 h-64 w-64 rounded-full bg-gray-100 blur-3xl" />
-        <div className="absolute -left-32 bottom-20 h-64 w-64 rounded-full bg-gray-100 blur-3xl" />
+        <div className="absolute -right-32 top-20 h-64 w-64 rounded-full bg-gray-100 blur-3xl dark:bg-slate-800" />
+        <div className="absolute -left-32 bottom-20 h-64 w-64 rounded-full bg-gray-100 blur-3xl dark:bg-slate-800" />
       </div>
 
       <div ref={containerRef} className="relative z-10 mx-auto max-w-7xl px-4 md:px-8">
@@ -118,16 +118,16 @@ const SectionTwo = () => {
           transition={{ duration: 0.5, ease: 'easeOut' }}
           className="mb-16 text-center"
         >
-          <span className="mb-4 inline-block rounded-full bg-gray-100 px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-gray-500">
+          <span className="mb-4 inline-block rounded-full bg-muted px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Tracking
           </span>
-          <h2 className="mb-4 text-3xl font-bold text-gray-900 md:text-4xl lg:text-5xl">
+          <h2 className="mb-4 text-3xl font-bold text-foreground md:text-4xl lg:text-5xl dark:text-slate-100">
             Monitor holdings in{' '}
-            <span className="bg-linear-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent dark:from-slate-200 dark:to-slate-100">
               real time
             </span>
           </h2>
-          <p className="mx-auto max-w-2xl text-base text-gray-500">
+          <p className="mx-auto max-w-2xl text-base text-muted-foreground">
             Watch your positions update as markets move
           </p>
         </motion.div>

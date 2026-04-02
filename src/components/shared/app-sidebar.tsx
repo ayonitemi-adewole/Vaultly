@@ -10,6 +10,7 @@ import {
   LogOut,
   PlusCircle
 } from 'lucide-react';
+import { ThemeSwitcher } from '@/components/ui/theme-switcher';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -33,7 +34,7 @@ const AppSidebar = () => {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col">
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-white text-slate-900 border-r border-gray-200 dark:bg-slate-950 dark:text-slate-100 dark:border-slate-800 flex flex-col">
       {/* Logo */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-200">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-900">
@@ -65,11 +66,14 @@ const AppSidebar = () => {
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="px-3 py-4 border-t border-gray-200">
+      {/* Theme toggle + Logout */}
+      <div className="px-3 py-4 border-t border-gray-200 dark:border-slate-700">
+        <div className="mb-3">
+          <ThemeSwitcher variant="button" className="w-full justify-start" />
+        </div>
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+          className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white transition-colors"
         >
           <LogOut className="size-5" />
           Logout

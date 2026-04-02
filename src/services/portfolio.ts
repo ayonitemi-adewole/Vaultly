@@ -10,6 +10,7 @@ import {
   query,
   orderBy,
   limit,
+  runTransaction,
 } from 'firebase/firestore';
 import { getUserProfile, updateUserBalance } from './user';
 
@@ -51,42 +52,130 @@ export const deleteFromPortfolio = async (id: string, currentValue: number) => {
   await deleteDoc(ref);
 };
 
-export const updatePortfolioAsset = async (
-  id: string,
-  newAmount: number,
-  totalSpent: number
+export const sellAsset = async (
+  coinId: string,
+  sellAmount: number,
+  sellPrice: number,
+  totalReceived: number,
+  selectedDate: string
 ) => {
   const user = auth.currentUser;
-  if (!user) return;
+  if (!user) throw new Error('User not authenticated');
 
-  const ref = doc(db, 'users', user.uid, 'portfolio', id);
+  await runTransaction(db, async (transaction) => {
+    // Get portfolio asset
+    const portfolioRef = doc(db, 'users', user.uid, 'portfolio', coinId);
+    const portfolioSnap = await transaction.get(portfolioRef);
+    if (!portfolioSnap.exists()) throw new Error('Portfolio asset not found');
 
-  try {
-    const snapshot = await getDocs(
-      collection(db, 'users', user.uid, 'portfolio')
-    );
-    const docData = snapshot.docs.find((doc) => doc.id === id)?.data();
+    const assetData = portfolioSnap.data();
+    const currentAmount = assetData?.totalAmount || 0;
 
-    console.log('Existing Portfolio Asset Data:', docData, 'ID:', id, 'New Amount:', newAmount, 'Total Spent:', totalSpent);
+    if (sellAmount > currentAmount) {
+      throw new Error('Insufficient holdings');
+    }
 
-    if (!docData) throw new Error('Portfolio asset not found');
+    const newAmount = currentAmount - sellAmount;
 
-    const prevAmount = docData.totalAmount || 0;
-    const prevAvgPrice = docData.averageBuyPrice || 0;
+    if (newAmount <= 0) {
+      // Sell all, delete
+      transaction.delete(portfolioRef);
+    } else {
+      // Partial sell
+      transaction.update(portfolioRef, {
+        totalAmount: newAmount,
+        updatedAt: new Date().toISOString(),
+      });
+    }
 
-    const updatedAmount = prevAmount + newAmount;
-    const updatedAvgPrice =
-      (prevAvgPrice * prevAmount + totalSpent) / updatedAmount;
-
-    await updateDoc(ref, {
-      totalAmount: updatedAmount,
-      averageBuyPrice: updatedAvgPrice,
-      updatedAt: new Date().toISOString(),
+    // Log transaction
+    const transactionsRef = collection(db, 'users', user.uid, 'transactions');
+    const newTxnRef = doc(transactionsRef);
+    transaction.set(newTxnRef, {
+      coinId,
+      type: 'sell',
+      amount: sellAmount,
+      price: sellPrice,
+      totalSpent: totalReceived, // For sells, this is received
+      date: selectedDate || new Date().toISOString(),
     });
-  } catch (err) {
-    console.error('Error updating portfolio asset:', err);
-    throw err;
-  }
+
+    // Update balance
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await transaction.get(userRef);
+    const currentBalance = userSnap.data()?.balance || 0;
+    transaction.update(userRef, {
+      balance: currentBalance + totalReceived,
+    });
+  });
+};
+
+export const buyAsset = async (
+  coin: any,
+  usdSpent: number,
+  selectedDate: string
+) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  await runTransaction(db, async (transaction) => {
+    // Get user profile
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists()) throw new Error('User profile not found');
+
+    const userData = userSnap.data();
+    const currentBalance = userData.balance || 0;
+
+    if (usdSpent > currentBalance) {
+      throw new Error('Insufficient balance');
+    }
+
+    // Check if coin exists in portfolio
+    const portfolioRef = doc(db, 'users', user.uid, 'portfolio', coin.coinId);
+    const portfolioSnap = await transaction.get(portfolioRef);
+
+    if (portfolioSnap.exists()) {
+      // Update existing
+      const existingData = portfolioSnap.data();
+      const prevAmount = existingData?.totalAmount || 0;
+      const prevAvgPrice = existingData?.averageBuyPrice || 0;
+      const newAmount = prevAmount + coin.amount;
+      const newAvgPrice = (prevAvgPrice * prevAmount + usdSpent) / newAmount;
+
+      transaction.update(portfolioRef, {
+        totalAmount: newAmount,
+        averageBuyPrice: newAvgPrice,
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      // Add new
+      transaction.set(portfolioRef, {
+        ...coin,
+        totalAmount: coin.amount,
+        averageBuyPrice: coin.buyPrice,
+        dateAdded: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    // Log transaction
+    const transactionsRef = collection(db, 'users', user.uid, 'transactions');
+    const newTxnRef = doc(transactionsRef);
+    transaction.set(newTxnRef, {
+      coinId: coin.coinId,
+      type: 'buy',
+      amount: coin.amount,
+      price: coin.buyPrice,
+      totalSpent: usdSpent,
+      date: selectedDate || new Date().toISOString(),
+    });
+
+    // Update balance
+    transaction.update(userRef, {
+      balance: currentBalance - usdSpent,
+    });
+  });
 };
 
 export const logTransaction = async (transaction: {
@@ -106,7 +195,7 @@ export const logTransaction = async (transaction: {
   });
 };
 
-export const getUserTransactions = async (page: number = 1, pageLimit: number = 10): Promise<Array<{
+export interface Transaction {
   id: string;
   coinId: string;
   type: 'buy' | 'sell';
@@ -114,7 +203,9 @@ export const getUserTransactions = async (page: number = 1, pageLimit: number = 
   price: number;
   totalSpent: number;
   date: string;
-}>> => {
+}
+
+export const getUserTransactions = async (page: number = 1, pageLimit: number = 10): Promise<Transaction[]> => {
   const user = auth.currentUser;
   if (!user) return [];
 
@@ -134,6 +225,48 @@ export const getUserTransactions = async (page: number = 1, pageLimit: number = 
       date: data.date || '',
     };
   });
+};
+
+export const getAllTransactions = async (): Promise<Transaction[]> => {
+  const user = auth.currentUser;
+  if (!user) return [];
+
+  const ref = collection(db, 'users', user.uid, 'transactions');
+  const snapshot = await getDocs(ref);
+  
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      coinId: data.coinId || '',
+      type: data.type || 'buy',
+      amount: data.amount || 0,
+      price: data.price || 0,
+      totalSpent: data.totalSpent || 0,
+      date: data.date || '',
+    };
+  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+};
+
+import type { PortfolioTotals, PerCoinMetrics } from '../utils/calculateProfits';
+import { aggregateTransactionsMetrics } from '../utils/calculateProfits';
+import { getCoinPrices } from './coingecko';
+
+export const getPortfolioMetricsFromTransactions = async (): Promise<{
+  perTransaction: any[];
+  totals: PortfolioTotals;
+  perCoin: Record<string, PerCoinMetrics>;
+}> => {
+  const transactions = await getAllTransactions();
+  const coinIds = [...new Set(transactions.map((t: Transaction) => t.coinId))];
+  
+  const pricesData: Record<string, number> = {};
+  if (coinIds.length > 0) {
+    const prices = await getCoinPrices(coinIds);
+    Object.assign(pricesData, prices);
+  }
+
+  return aggregateTransactionsMetrics(transactions, pricesData);
 };
 
 export const getTransactionCount = async () => {

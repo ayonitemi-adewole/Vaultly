@@ -10,12 +10,12 @@ const Hero = () => {
   const isInView = useInView(containerRef, { once: true, margin: '-100px' });
 
   return (
-    <div ref={containerRef} className="relative overflow-hidden bg-white">
+    <div ref={containerRef} className="relative overflow-hidden bg-background transition-colors duration-300 dark:bg-slate-950">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -left-40 top-20 h-80 w-80 rounded-full bg-gray-100 blur-3xl" />
-        <div className="absolute -right-40 bottom-20 h-80 w-80 rounded-full bg-gray-100 blur-3xl" />
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-150 w-150 rounded-full bg-linear-to-r from-gray-50 to-gray-100 blur-3xl opacity-50" />
+        <div className="absolute -left-40 top-20 h-80 w-80 rounded-full bg-gray-100 blur-3xl dark:bg-slate-800" />
+        <div className="absolute -right-40 bottom-20 h-80 w-80 rounded-full bg-gray-100 blur-3xl dark:bg-slate-800" />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-150 w-150 rounded-full bg-linear-to-r from-gray-50 to-gray-100 blur-3xl opacity-50 dark:from-slate-800 dark:to-slate-900" />
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-16 md:py-24 lg:py-32">
@@ -32,19 +32,18 @@ const Hero = () => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="mb-6 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50/80 px-4 py-1.5 text-sm text-gray-600 backdrop-blur-sm"
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-4 py-1.5 text-sm text-muted-foreground backdrop-blur-sm dark:bg-slate-800/80"
             >
               <span className="flex h-2 w-2 items-center rounded-full bg-green-500">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-5" />
               </span>
               Real-time crypto tracking
-              <ChevronRight className="size-4" />
             </motion.div>
 
             {/* Main heading */}
-            <h1 className="mb-6 text-4xl font-bold leading-tight text-gray-900 md:text-5xl lg:text-6xl">
+            <h1 className="mb-6 text-4xl font-bold leading-tight text-foreground md:text-5xl lg:text-6xl dark:text-slate-100">
               Track your Crypto Portfolio{' '}
-              <span className="bg-linear-to-r from-gray-700 via-gray-800 to-gray-900 bg-clip-text text-transparent">
+              <span className="bg-linear-to-r from-gray-700 via-gray-800 to-gray-900 bg-clip-text text-transparent dark:from-slate-200 dark:via-slate-100 dark:to-slate-300">
                 with Precision
               </span>
             </h1>
@@ -54,7 +53,7 @@ const Hero = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-gray-500 md:text-xl"
+              className="mx-auto mb-10 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl"
             >
               Real-time market data and performance insights at your fingertips.{' '}
               Make informed decisions about your investments with clear, actionable analytics.
@@ -69,7 +68,7 @@ const Hero = () => {
             >
               <Button
                 size="lg"
-                className="group bg-gray-900 px-8 text-white hover:bg-gray-800"
+                className="group bg-primary px-8 text-primary-foreground hover:bg-primary/90"
                 asChild
               >
                 <Link to="/signup">
@@ -80,7 +79,7 @@ const Hero = () => {
               <Button
                 size="lg"
                 variant="outline"
-                className="border-gray-200 px-8 text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+                className="border-border px-8 text-foreground hover:bg-accent hover:text-accent-foreground"
                 asChild
               >
                 <Link to="/login">
@@ -99,7 +98,7 @@ const Hero = () => {
           >
             <div className="relative overflow-hidden rounded-3xl shadow-2xl shadow-gray-200/50">
               {/* linear overlay */}
-              <div className="absolute inset-0 z-10 bg-linear-to-t from-gray-900/20 via-transparent to-transparent" />
+              <div className="absolute inset-0 z-10 bg-linear-to-t from-background/20 via-transparent to-transparent" />
               
               <img
                 src={hero}
@@ -108,7 +107,7 @@ const Hero = () => {
               />
               
               {/* Decorative border */}
-              <div className="absolute inset-0 rounded-3xl ring-1 ring-gray-200/50" />
+              <div className="absolute inset-0 rounded-3xl ring-1 ring-border/50" />
             </div>
           </motion.div>
         </div>

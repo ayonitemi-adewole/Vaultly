@@ -12,18 +12,18 @@ import {
   Search,
   ArrowDownRight as ArrowDownRightIcon,
 } from 'lucide-react';
-import { getUserPortfolio, getUserTransactions } from '@/services/portfolio';
+import { getUserPortfolio, getUserTransactions, getPortfolioMetricsFromTransactions, getPortfolioHistory } from '@/services/portfolio';
 import { getCoinPrices, getCoinMarketChart } from '@/services/coingecko';
-import { calculateProfit } from '@/utils/calculateProfits';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+  import { calculateProfitForHolding } from '@/utils/calculateProfits';
+  import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+  } from 'recharts';
 
 
 const Dashboard = () => {
@@ -35,51 +35,21 @@ const Dashboard = () => {
     []
   );
   const [range, setRange] = useState<'1' | '7' | '30' | '90'>('7');
-  const [growth, setGrowth] = useState<number | null>(null);
+
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [txnMetrics, setTxnMetrics] = useState<any>(null);
   const [totalChange, setTotalChange] = useState<number>(0);
   const [changePercent, setChangePercent] = useState<number>(0);
+  const [totalValue, setTotalValue] = useState<number>(0);
+  const [totalInvested, setTotalInvested] = useState<number>(0);
 
-  // Calculate total invested amount from portfolio
-  const totalInvested = portfolio.reduce((sum, item) => {
-    return sum + (item.totalAmount * item.buyPrice);
-  }, 0);
+  const txnGrowth = txnMetrics && totalInvested > 0
+    ? ((totalValue - totalInvested) / totalInvested) * 100
+    : null;
 
-  const totalValue = portfolio.reduce((sum, item) => {
-    const currentPrice = prices[item.coinId]?.usd || 0;
-    const { currentValue } = calculateProfit(
-      item.totalAmount,
-      item.buyPrice,
-      currentPrice
-    );
-    return sum + currentValue;
-  }, 0);
-
-  // Calculate actual investment performance (profit/loss from user's buy price)
-  const calculateInvestmentPerformance = () => {
-    if (portfolio.length === 0 || totalInvested === 0) {
-      setGrowth(null);
-      return;
-    }
-
-    // Calculate total current value and total invested
-    const currentTotalValue = portfolio.reduce((sum, item) => {
-      const currentPrice = prices[item.coinId]?.usd || 0;
-      return sum + (item.totalAmount * currentPrice);
-    }, 0);
-
-    const invested = portfolio.reduce((sum, item) => {
-      return sum + (item.totalAmount * item.buyPrice);
-    }, 0);
-
-    // Calculate percentage growth based on actual investment
-    const percentChange = ((currentTotalValue - invested) / invested) * 100;
-    setGrowth(percentChange);
-  };
-
-  // Calculate 24h change from portfolio and CoinGecko data
+  // Calculate 24h change using portfolio perCoin metrics
   const calculate24hChange = () => {
-    if (portfolio.length === 0 || Object.keys(prices).length === 0 || totalValue === 0) {
+    if (!txnMetrics || Object.keys(prices).length === 0 || totalValue === 0) {
       setTotalChange(0);
       setChangePercent(0);
       return;
@@ -87,13 +57,9 @@ const Dashboard = () => {
 
     let totalChangeValue = 0;
     
-    portfolio.forEach((asset) => {
-      const currentPrice = prices[asset.coinId]?.usd || 0;
-      const change24h = prices[asset.coinId]?.usd_24h_change || 0;
-      const currentValue = asset.totalAmount * currentPrice;
-      
-      // Calculate the USD change for this asset
-      const assetChange = currentValue * (change24h / 100);
+    Object.entries(txnMetrics.perCoin).forEach(([coinId, coinData]: [string, any]) => {
+      const change24h = prices[coinId]?.usd_24h_change || 0;
+      const assetChange = coinData.totalCurrentValue * (change24h / 100);
       totalChangeValue += assetChange;
     });
 
@@ -102,21 +68,74 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    calculate24hChange();
-    calculateInvestmentPerformance();
-  }, [portfolio, prices, totalValue, totalInvested]);
+    if (prices && portfolio.length > 0) {
+      // prevent stale data if we already set computed values from fetchPortfolio
+      const currentTotal = portfolio.reduce((sum: number, asset: any) => {
+        const price = prices[asset.coinId]?.usd || 0;
+        return sum + (asset.totalAmount || asset.amount || 0) * price;
+      }, 0);
+      setTotalValue(currentTotal);
 
-  const fetchPortfolio = async () => {
+      const change24h = portfolio.reduce((sum: number, asset: any) => {
+        const price = prices[asset.coinId]?.usd || 0;
+        const changePct = prices[asset.coinId]?.usd_24h_change || 0;
+        const amount = asset.totalAmount || asset.amount || 0;
+        return sum + amount * price * (changePct / 100);
+      }, 0);
+      setTotalChange(change24h);
+      setChangePercent(currentTotal > 0 ? (change24h / currentTotal) * 100 : 0);
+    } else {
+      calculate24hChange();
+    }
+  }, [txnMetrics, prices, portfolio]);
+
+const fetchPortfolio = async (targetRange: '1' | '7' | '30' | '90' = range) => {
     setIsLoading(true);
     try {
       const userPortfolio = await getUserPortfolio();
       setPortfolio(userPortfolio);
-      const coinIds = userPortfolio.map((item: any) => item.coinId);
+
+      const txnData = await getPortfolioMetricsFromTransactions();
+      setTxnMetrics(txnData);
+
+      const coinIds = [...new Set(userPortfolio.map((asset: any) => asset.coinId))];
+      let priceData: any = {};
       if (coinIds.length > 0) {
-        const priceData = await getCoinPrices(coinIds);
+        priceData = await getCoinPrices(coinIds);
         setPrices(priceData);
       }
-      await buildPortfolioChart(userPortfolio, range);
+
+      // Recalculate total value from current portfolio + prices
+      const currentTotalValue = userPortfolio.reduce((sum: number, asset: any) => {
+        const price = priceData[asset.coinId]?.usd || 0;
+        return sum + (asset.totalAmount || asset.amount || 0) * price;
+      }, 0);
+      setTotalValue(currentTotalValue);
+
+      const investedValue = txnData?.totals?.totalBuyValue || 0;
+      setTotalInvested(investedValue);
+
+      // 24h change is based on coin-level 24h change and current holdings
+      const change24h = userPortfolio.reduce((sum: number, asset: any) => {
+        const price = priceData[asset.coinId]?.usd || 0;
+        const changePct = priceData[asset.coinId]?.usd_24h_change || 0;
+        const amount = asset.totalAmount || asset.amount || 0;
+        return sum + amount * price * (changePct / 100);
+      }, 0);
+      setTotalChange(change24h);
+      setChangePercent(currentTotalValue > 0 ? (change24h / currentTotalValue) * 100 : 0);
+
+      // Prefer historical portfolio snapshots for the chart, fallback to per-coin API series
+      if (targetRange === '1') {
+        await buildPortfolioChart(userPortfolio, targetRange);
+      } else {
+        const history = await getPortfolioHistory(parseInt(targetRange, 10));
+        if (history && history.length > 0) {
+          setChartData(history);
+        } else {
+          await buildPortfolioChart(userPortfolio, targetRange);
+        }
+      }
 
       // Fetch transactions from Firestore
       const userTransactions = await getUserTransactions();
@@ -152,7 +171,6 @@ const Dashboard = () => {
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         setChartData(chartDataArray);
-        setGrowth(null); // No growth for 1 day view
         return;
       }
 
@@ -178,12 +196,6 @@ const Dashboard = () => {
 
       setChartData(data);
 
-      // Calculate growth based on actual investment performance
-      if (data.length > 1) {
-        calculateInvestmentPerformance();
-      } else {
-        setGrowth(null);
-      }
     } catch (err) {
       console.error('Error building chart:', err);
     }
@@ -191,11 +203,11 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchPortfolio();
-  }, []);
+  }, [range]);
 
   const handleRangeChange = async (newRange: '1' | '7' | '30' | '90') => {
     setRange(newRange);
-    await buildPortfolioChart(portfolio, newRange);
+    await fetchPortfolio(newRange);
   };
 
   const handleRefresh = () => {
@@ -209,14 +221,14 @@ const Dashboard = () => {
     }).format(value);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background transition-colors duration-300 dark:bg-slate-950">
       <AppSidebar />
       <main className="ml-64 p-8">
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500 text-sm mt-1">
+            <h1 className="text-2xl font-bold text-foreground dark:text-slate-100">Dashboard</h1>
+            <p className="text-muted-foreground text-sm mt-1">
               Welcome back! Here's your portfolio overview.
             </p>
           </div>
@@ -236,26 +248,26 @@ const Dashboard = () => {
               <Bell className="size-4" />
               <span className="absolute -top-1 -right-1 size-2 bg-red-500 rounded-full"></span>
             </Button>
-            <div className="h-8 w-8 rounded-full bg-gray-900 flex items-center justify-center">
-              <span className="text-white text-sm font-medium">U</span>
+            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground text-sm font-medium">U</span>
             </div>
           </div>
         </header>
 
         {/* Portfolio Performance Chart */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+        <div className="bg-card rounded-xl shadow-sm border border-border p-6 mb-8 dark:bg-slate-900 dark:shadow-slate-900/20">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground dark:text-slate-100">
                 Portfolio Performance ({range === '1' ? '24 Hours' : `${range} Days`})
               </h2>
-              {growth !== null && range !== '1' && (
+              {txnGrowth !== null && range !== '1' && (
                 <p
                   className={`text-sm font-medium mt-1 ${
-                    growth >= 0 ? 'text-green-600' : 'text-red-600'
+                    txnGrowth >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                   }`}
                 >
-                  {growth >= 0 ? '▲' : '▼'} {Math.abs(growth).toFixed(2)}% 
+                  {txnGrowth >= 0 ? '▲' : '▼'} {Math.abs(txnGrowth).toFixed(2)}% 
                   {range === '7' ? ' this week' : range === '30' ? ' this month' : ` in ${range} days`}
                 </p>
               )}
@@ -267,7 +279,7 @@ const Dashboard = () => {
                   size="sm"
                   variant={range === r ? 'default' : 'outline'}
                   onClick={() => handleRangeChange(r)}
-                  className={range === r ? 'bg-gray-900 text-white' : ''}
+                  className={range === r ? 'bg-primary text-primary-foreground' : ''}
                 >
                   {r}d
                 </Button>
@@ -276,9 +288,9 @@ const Dashboard = () => {
           </div>
 
           {isLoading ? (
-            <p className="text-gray-500 text-sm">Loading chart...</p>
+            <p className="text-muted-foreground text-sm">Loading chart...</p>
           ) : chartData.length === 0 ? (
-            <p className="text-gray-400 text-sm">No data to display.</p>
+            <p className="text-muted-foreground text-sm">No data to display.</p>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={chartData}>
@@ -288,14 +300,16 @@ const Dashboard = () => {
                     <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-slate-700" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 12, fill: '#6b7280' }}
+                  className="dark:fill-slate-400"
                 />
                 <YAxis
                   tickFormatter={(v) => `$${v.toLocaleString()}`}
                   tick={{ fontSize: 12, fill: '#6b7280' }}
+                  className="dark:fill-slate-400"
                 />
                 <Tooltip
                   formatter={(v: number | undefined) =>
@@ -319,52 +333,52 @@ const Dashboard = () => {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="bg-card rounded-xl p-6 shadow-sm border border-border dark:bg-slate-900 dark:shadow-slate-900/20">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-gray-500 text-sm font-medium">
+              <span className="text-muted-foreground text-sm font-medium">
                 Total Balance
               </span>
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <Wallet className="size-5 text-gray-600" />
+              <div className="p-2 bg-muted rounded-lg">
+                <Wallet className="size-5 text-muted-foreground" />
               </div>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900">
+            <h2 className="text-3xl font-bold text-foreground dark:text-slate-100">
               {isLoading ? '...' : formatCurrency(totalValue)}
             </h2>
             <div className="flex items-center gap-1 mt-2">
               {totalChange >= 0 ? (
-                <TrendingUp className="size-4 text-green-500" />
+                <TrendingUp className="size-4 text-green-500 dark:text-green-400" />
               ) : (
-                <TrendingDown className="size-4 text-red-500" />
+                <TrendingDown className="size-4 text-red-500 dark:text-red-400" />
               )}
               <span
                 className={`text-sm font-medium ${
-                  totalChange >= 0 ? 'text-green-500' : 'text-red-500'
+                  totalChange >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'
                 }`}
               >
                 {totalChange >= 0 ? '+' : ''}
                 {totalChange.toFixed(2)}%
               </span>
-              <span className="text-gray-400 text-sm">last 24h</span>
+              <span className="text-muted-foreground text-sm">last 24h</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="bg-card rounded-xl p-6 shadow-sm border border-border dark:bg-slate-900 dark:shadow-slate-900/20">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-gray-500 text-sm font-medium">
+              <span className="text-muted-foreground text-sm font-medium">
                 24h Change
               </span>
-              <div className="p-2 bg-gray-100 rounded-lg">
+              <div className="p-2 bg-muted rounded-lg">
                 {changePercent >= 0 ? (
-                  <ArrowUpRight className="size-5 text-green-500" />
+                  <ArrowUpRight className="size-5 text-green-500 dark:text-green-400" />
                 ) : (
-                  <ArrowDownRightIcon className="size-5 text-red-500" />
+                  <ArrowDownRightIcon className="size-5 text-red-500 dark:text-red-400" />
                 )}
               </div>
             </div>
             <h2
               className={`text-3xl font-bold ${
-                changePercent >= 0 ? 'text-green-500' : 'text-red-500'
+                changePercent >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'
               }`}
             >
               {isLoading
@@ -373,24 +387,24 @@ const Dashboard = () => {
                     (totalValue * changePercent) / 100
                   )}`}
             </h2>
-            <p className="text-gray-400 text-sm mt-2">
+            <p className="text-muted-foreground text-sm mt-2">
               {changePercent >= 0 ? 'Profit' : 'Loss'} today
             </p>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <div className="bg-card rounded-xl p-6 shadow-sm border border-border dark:bg-slate-900 dark:shadow-slate-900/20">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-gray-500 text-sm font-medium">
+              <span className="text-muted-foreground text-sm font-medium">
                 Total Assets
               </span>
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <TrendingUp className="size-5 text-gray-600" />
+              <div className="p-2 bg-muted rounded-lg">
+                <TrendingUp className="size-5 text-muted-foreground" />
               </div>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900">
+            <h2 className="text-3xl font-bold text-foreground dark:text-slate-100">
               {isLoading ? '...' : portfolio.length}
             </h2>
-            <p className="text-gray-400 text-sm mt-2">
+            <p className="text-muted-foreground text-sm mt-2">
               Different cryptocurrencies
             </p>
           </div>
@@ -398,48 +412,48 @@ const Dashboard = () => {
 
         {/* Quick Actions */}
         <div className="flex gap-4 mb-8">
-          <Button className="bg-gray-900 hover:bg-gray-800 gap-2">
+          <Button className="bg-primary hover:bg-primary/90 gap-2 text-primary-foreground">
             <Plus className="size-4" />
             Add Asset
           </Button>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2 border-border hover:bg-accent">
             <Search className="size-4" />
             Explore Markets
           </Button>
         </div>
 
         {/* Assets Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Your Assets</h3>
+        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden dark:bg-slate-900 dark:shadow-slate-900/20">
+          <div className="p-6 border-b border-border">
+            <h3 className="text-lg font-semibold text-foreground dark:text-slate-100">Your Assets</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted dark:bg-slate-800">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Asset
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Price
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Amount
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Value
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Profit/Loss
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border dark:divide-slate-700">
                 {isLoading ? (
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-6 py-8 text-center text-gray-500"
+                      className="px-6 py-8 text-center text-muted-foreground"
                     >
                       Loading assets...
                     </td>
@@ -448,7 +462,7 @@ const Dashboard = () => {
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-6 py-8 text-center text-gray-500"
+                      className="px-6 py-8 text-center text-muted-foreground"
                     >
                       No assets found. Add your first one!
                     </td>
@@ -456,33 +470,33 @@ const Dashboard = () => {
                 ) : (
                   portfolio.map((asset) => {
                     const currentPrice = prices[asset.coinId]?.usd || 0;
-                    const { currentValue, profit, profitPercent } =
-                      calculateProfit(
+        const { currentValue, profit, profitPercent } =
+                      calculateProfitForHolding(
                         asset.totalAmount,
-                        asset.buyPrice,
+                        asset.averageBuyPrice || asset.buyPrice,
                         currentPrice
                       );
                     return (
                       <tr
                         key={asset.coinId}
-                        className="hover:bg-gray-50 transition-colors"
+                        className="hover:bg-muted transition-colors dark:hover:bg-slate-800"
                       >
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        <td className="px-6 py-4 text-sm font-medium text-foreground dark:text-slate-100">
                           {asset.name}
                         </td>
-                        <td className="px-6 py-4 text-right text-sm text-gray-700">
+                        <td className="px-6 py-4 text-right text-sm text-muted-foreground">
                           {formatCurrency(currentPrice)}
                         </td>
-                        <td className="px-6 py-4 text-right text-sm text-gray-700">
+                        <td className="px-6 py-4 text-right text-sm text-muted-foreground">
                           {asset.totalAmount} {asset.symbol.toUpperCase()}
                         </td>
-                        <td className="px-6 py-4 text-right text-sm font-semibold text-gray-900">
+                        <td className="px-6 py-4 text-right text-sm font-semibold text-foreground dark:text-slate-100">
                           {formatCurrency(currentValue)}
                         </td>
                         <td className="px-6 py-4 text-right text-sm">
                           <span
                             className={`font-medium ${
-                              profit >= 0 ? 'text-green-500' : 'text-red-500'
+                              profit >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'
                             }`}
                           >
                             {profit >= 0 ? '+' : ''}

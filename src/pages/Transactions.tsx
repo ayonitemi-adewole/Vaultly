@@ -97,14 +97,14 @@ const Transactions = () => {
   const hasMore = currentPage * ITEMS_PER_PAGE < totalCount;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background transition-colors duration-300 dark:bg-slate-950">
       <AppSidebar />
       <main className="ml-64 p-8">
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Transactions</h1>
-            <p className="text-gray-500 text-sm mt-1">
+            <h1 className="text-2xl font-bold text-foreground dark:text-slate-100">Transactions</h1>
+            <p className="text-muted-foreground text-sm mt-1">
               View your complete transaction history
             </p>
           </div>
@@ -113,7 +113,7 @@ const Transactions = () => {
               variant="outline"
               size="sm"
               onClick={handleRefresh}
-              className="gap-2"
+              className="gap-2 border-border hover:bg-accent"
             >
               <RefreshCw
                 className={`size-4 ${isLoading ? 'animate-spin' : ''}`}
@@ -124,28 +124,28 @@ const Transactions = () => {
         </header>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+        <div className="bg-card rounded-xl shadow-sm border border-border p-4 mb-6 dark:bg-slate-900 dark:shadow-slate-900/20">
           <div className="flex flex-col md:flex-row gap-4">
             {/* Search */}
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
               <Input
                 type="text"
                 placeholder="Search by asset..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
+                className="pl-10 border-border focus:border-primary"
               />
             </div>
 
             {/* Filter Buttons */}
             <div className="flex items-center gap-2">
-              <Filter className="size-5 text-gray-400 mr-2" />
+              <Filter className="size-5 text-muted-foreground mr-2" />
               <Button
                 size="sm"
                 variant={filter === 'all' ? 'default' : 'outline'}
                 onClick={() => setFilter('all')}
-                className={filter === 'all' ? 'bg-gray-900 text-white' : ''}
+                className={filter === 'all' ? 'bg-primary text-primary-foreground' : 'border-border hover:bg-accent'}
               >
                 All
               </Button>
@@ -153,7 +153,7 @@ const Transactions = () => {
                 size="sm"
                 variant={filter === 'buy' ? 'default' : 'outline'}
                 onClick={() => setFilter('buy')}
-                className={filter === 'buy' ? 'bg-green-600 hover:bg-green-700' : ''}
+                className={filter === 'buy' ? 'bg-green-600 hover:bg-green-700 text-white' : 'border-border hover:bg-accent'}
               >
                 Buy
               </Button>
@@ -161,7 +161,7 @@ const Transactions = () => {
                 size="sm"
                 variant={filter === 'sell' ? 'default' : 'outline'}
                 onClick={() => setFilter('sell')}
-                className={filter === 'sell' ? 'bg-red-600 hover:bg-red-700' : ''}
+                className={filter === 'sell' ? 'bg-red-600 hover:bg-red-700 text-white' : 'border-border hover:bg-accent'}
               >
                 Sell
               </Button>
@@ -170,13 +170,13 @@ const Transactions = () => {
         </div>
 
         {/* Transactions Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
+        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden dark:bg-slate-900 dark:shadow-slate-900/20">
+          <div className="p-6 border-b border-border">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-foreground dark:text-slate-100">
                 Transaction History
               </h3>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-muted-foreground">
                 {filteredTransactions.length} of {totalCount} transactions
               </span>
             </div>
@@ -184,18 +184,18 @@ const Transactions = () => {
 
           {isLoading ? (
             <div className="p-8 text-center">
-              <RefreshCw className="size-8 text-gray-400 animate-spin mx-auto mb-2" />
-              <p className="text-gray-500">Loading transactions...</p>
+              <RefreshCw className="size-8 text-muted-foreground animate-spin mx-auto mb-2" />
+              <p className="text-muted-foreground">Loading transactions...</p>
             </div>
           ) : filteredTransactions.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">No transactions found.</p>
+              <p className="text-muted-foreground">No transactions found.</p>
               {search || filter !== 'all' ? (
-                <p className="text-gray-400 text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   Try adjusting your search or filters
                 </p>
               ) : (
-                <p className="text-gray-400 text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   Your transactions will appear here
                 </p>
               )}
@@ -203,43 +203,43 @@ const Transactions = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-muted dark:bg-slate-800">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Type
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Asset
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Price
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Total Value
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-border dark:divide-slate-700">
                   {filteredTransactions.map((tx) => (
                     <tr
                       key={tx.id}
-                      className="hover:bg-gray-50 transition-colors"
+                      className="hover:bg-muted transition-colors dark:hover:bg-slate-800"
                     >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                         {formatDate(tx.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             tx.type === 'buy'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-400'
+                              : 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-400'
                           }`}
                         >
                           {tx.type === 'buy' ? (
@@ -250,20 +250,20 @@ const Transactions = () => {
                           {tx.type.charAt(0).toUpperCase() + tx.type.slice(1)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground dark:text-slate-100">
                         {tx.coinId.toUpperCase()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-muted-foreground">
                         {tx.amount.toLocaleString(undefined, {
                           maximumFractionDigits: 8,
                         })}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-muted-foreground">
                         {formatCurrency(tx.price)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-foreground dark:text-slate-100">
                         <span
-                          className={tx.type === 'sell' ? 'text-red-600' : 'text-green-600'}
+                          className={tx.type === 'sell' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}
                         >
                           {tx.type === 'sell' ? '-' : '+'}
                           {formatCurrency(tx.totalSpent)}
@@ -278,8 +278,8 @@ const Transactions = () => {
 
           {/* Pagination */}
           {totalCount > ITEMS_PER_PAGE && (
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-              <div className="text-sm text-gray-500">
+            <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
                 Showing {filteredTransactions.length} of {totalCount} transactions
               </div>
               <div className="flex gap-2">
@@ -291,6 +291,7 @@ const Transactions = () => {
                     fetchTransactions(1);
                   }}
                   disabled={currentPage === 1}
+                  className="border-border hover:bg-accent"
                 >
                   First
                 </Button>
@@ -303,10 +304,11 @@ const Transactions = () => {
                     fetchTransactions(prevPage);
                   }}
                   disabled={currentPage === 1}
+                  className="border-border hover:bg-accent"
                 >
                   Previous
                 </Button>
-                <span className="flex items-center px-4 text-sm text-gray-600">
+                <span className="flex items-center px-4 text-sm text-muted-foreground">
                   Page {currentPage} of {totalPages}
                 </span>
                 <Button
@@ -314,6 +316,7 @@ const Transactions = () => {
                   size="sm"
                   onClick={handleLoadMore}
                   disabled={!hasMore || isLoadingMore}
+                  className="border-border hover:bg-accent"
                 >
                   {isLoadingMore ? 'Loading...' : 'Load More'}
                 </Button>
@@ -323,7 +326,7 @@ const Transactions = () => {
         </div>
 
         {/* Last Updated */}
-        <p className="text-center text-gray-400 text-sm mt-8">
+        <p className="text-center text-muted-foreground text-sm mt-8">
           Last updated: {lastUpdated.toLocaleTimeString()}
         </p>
       </main>

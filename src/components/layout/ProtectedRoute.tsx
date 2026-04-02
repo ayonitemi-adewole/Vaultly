@@ -20,7 +20,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return unsubscribe;
   }, []);
 
-  if (loading) return <div className="flex justify-center items-center h-screen text-white">Loading...</div>;
+  if (loading) return <div className="flex justify-center items-center h-screen text-foreground dark:text-slate-100">Loading...</div>;
 
   if (!user) return <Navigate to="/login" />;
 
